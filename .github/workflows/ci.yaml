@@ -23,10 +23,13 @@ jobs:
           - lint
           - attw
           - build
+          - generate
         include:
           - task: format
             diff-check: true
           - task: license-header
+            diff-check: true
+          - task: generate
             diff-check: true
     name: ${{ matrix.task }}
     steps:

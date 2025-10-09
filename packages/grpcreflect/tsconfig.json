@@ -3,7 +3,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": [
-      // For Error.cause in error.ts and error.test.ts
+      // DOM for the fetch and streams API
       "DOM"
     ]
   }
