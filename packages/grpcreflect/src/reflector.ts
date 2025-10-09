@@ -193,6 +193,7 @@ function createNotFoundResponse(errorMessage: string): MessageResponse {
 
 function serializeWithImports(root: DescFile, sent: Set<string>): Uint8Array[] {
   const res: Uint8Array[] = [];
+  sent.add(root.name);
   res.push(toBinary(FileDescriptorProtoSchema, root.proto));
   for (const file of root.dependencies) {
     if (sent.has(file.name)) {
