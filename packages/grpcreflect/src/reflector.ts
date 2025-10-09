@@ -16,49 +16,86 @@ import {
   create,
   type DescExtension,
   type DescFile,
-  type DescMessage,
+  type DescService,
   type FileRegistry,
   type MessageInitShape,
   toBinary,
 } from "@bufbuild/protobuf";
-import { Code, type ServiceImpl } from "@connectrpc/connect";
+import {
+  Code,
+  type ConnectRouter,
+  type ServiceImpl,
+} from "@connectrpc/connect";
 import { ServerReflectionResponseSchema } from "./gen/grpc/reflection/v1/reflection_pb.js";
-import type {
-  ExtensionRequest,
+import {
   ServerReflection,
-  ServerReflectionRequest,
-  ServiceResponseSchema,
+  type ExtensionRequest,
+  type ServerReflectionRequest,
+  type ServiceResponseSchema,
 } from "./gen/grpc/reflection/v1/reflection_pb.js";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
+
+/**
+ * Options that can be passed to registerReflectionServices.
+ */
+export interface RegisterReflectionServiceOptions {
+  /**
+   * The protobuf file registry to resolve file descriptor sets.
+   */
+  registry: FileRegistry;
+  /**
+   * The services to expose. Array of DescService or the fully qualified name of a service.
+   * The full descriptors of the named services should be part of the registry.
+   *
+   * This option only affects `listServices` operation of the reflection service. All other operations
+   * will use the registry to resolve symbols and files.
+   *
+   * Optional, default is to expose all services available in the registry.
+   */
+  services?: (DescService | string)[];
+}
+
+/**
+ *  Registers the gRPC reflection service on the given router.
+ */
+export function registerReflectionServices(
+  router: ConnectRouter,
+  options: RegisterReflectionServiceOptions,
+) {
+  router.service(
+    ServerReflection,
+    new Reflector(options.registry, options.services),
+  );
+}
 
 type MessageResponse = MessageInitShape<
   typeof ServerReflectionResponseSchema
 >["messageResponse"];
 
-export class Reflector implements ServiceImpl<typeof ServerReflection> {
-  private extensionsByExtendee = new Map<string, DescExtension[]>();
-  constructor(private registry: FileRegistry) {
-    const fill = (exts: DescExtension[]) => {
-      for (const ext of exts) {
-        let allExt = this.extensionsByExtendee.get(ext.extendee.typeName);
-        if (allExt === undefined) {
-          allExt = [];
-          this.extensionsByExtendee.set(ext.extendee.typeName, allExt);
+class Reflector implements ServiceImpl<typeof ServerReflection> {
+  private allExtensions: DescExtension[];
+  private exposedServices: MessageInitShape<typeof ServiceResponseSchema>[];
+  constructor(
+    private registry: FileRegistry,
+    services: RegisterReflectionServiceOptions["services"],
+  ) {
+    const allDesc = Array.from(registry);
+    this.allExtensions = allDesc.filter((desc) => desc.kind === "extension");
+    if (services !== undefined) {
+      this.exposedServices = services?.map((descOrName) => {
+        if (typeof descOrName !== "string") {
+          descOrName = descOrName.typeName;
+        } else if (registry.getService(descOrName) === undefined) {
+          throw new Error(
+            `grpcreflect: Trying to expose a service "${descOrName}" that is not in the registry`,
+          );
         }
-        allExt.push(ext);
-      }
-    };
-    const fillMsg = (msg: DescMessage) => {
-      fill(msg.nestedExtensions);
-      for (const nestedMsg of msg.nestedMessages) {
-        fillMsg(nestedMsg);
-      }
-    };
-    for (const file of registry.files) {
-      fill(file.extensions);
-      for (const msg of file.messages) {
-        fillMsg(msg);
-      }
+        return { name: descOrName };
+      });
+    } else {
+      this.exposedServices = allDesc
+        .filter((desc) => desc.kind === "service")
+        .map((desc) => ({ name: desc.typeName }));
     }
   }
 
@@ -127,7 +164,7 @@ export class Reflector implements ServiceImpl<typeof ServerReflection> {
     return {
       case: "fileDescriptorResponse",
       value: {
-        fileDescriptorProto: serializeWithImports(desc?.file, sent),
+        fileDescriptorProto: serializeWithImports(desc.file, sent),
       },
     };
   }
@@ -147,39 +184,31 @@ export class Reflector implements ServiceImpl<typeof ServerReflection> {
     return {
       case: "fileDescriptorResponse",
       value: {
-        fileDescriptorProto: serializeWithImports(desc?.file, sent),
+        fileDescriptorProto: serializeWithImports(desc.file, sent),
       },
     };
   }
 
   private handleAllExtensionNumbersOfType(typeName: string): MessageResponse {
-    const extensions = this.extensionsByExtendee.get(typeName);
-    if (extensions === undefined) {
+    const extendee = this.registry.getMessage(typeName);
+    if (extendee === undefined) {
       return createNotFoundResponse("type not found");
-    }
-    const extensionNumbers: number[] = [];
-    for (const ext of extensions) {
-      extensionNumbers.push(ext.number);
     }
     return {
       case: "allExtensionNumbersResponse",
       value: {
         baseTypeName: typeName,
-        extensionNumber: extensionNumbers,
+        extensionNumber: this.allExtensions
+          .filter((e) => e.extendee.typeName === typeName)
+          .map((e) => e.number),
       },
     };
   }
 
   private handleListServices(): MessageResponse {
-    const services: MessageInitShape<typeof ServiceResponseSchema>[] = [];
-    for (const file of this.registry.files) {
-      for (const service of file.services) {
-        services.push({ name: service.typeName });
-      }
-    }
     return {
       case: "listServicesResponse",
-      value: { service: services },
+      value: { service: this.exposedServices },
     };
   }
 }
