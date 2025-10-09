@@ -46,5 +46,8 @@
   "devDependencies": {
     "@bufbuild/protobuf": "^2.6.3",
     "@connectrpc/connect": "^2.0.3"
+  },
+  "dependencies": {
+    "@bufbuild/protocompile": "^0.0.1"
   }
 }

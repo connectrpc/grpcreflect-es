@@ -38,7 +38,7 @@ import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 /**
  * Options that can be passed to registerReflectionServices.
  */
-export interface RegisterReflectionServiceOptions {
+export interface ReflectionServiceOptions {
   /**
    * The protobuf file registry to resolve file descriptor sets.
    */
@@ -60,7 +60,7 @@ export interface RegisterReflectionServiceOptions {
  */
 export function registerReflectionServices(
   router: ConnectRouter,
-  options: RegisterReflectionServiceOptions,
+  options: ReflectionServiceOptions,
 ) {
   router.service(
     ServerReflection,
@@ -77,7 +77,7 @@ class Reflector implements ServiceImpl<typeof ServerReflection> {
   private exposedServices: MessageInitShape<typeof ServiceResponseSchema>[];
   constructor(
     private registry: FileRegistry,
-    services: RegisterReflectionServiceOptions["services"],
+    services: ReflectionServiceOptions["services"],
   ) {
     const allDesc = Array.from(registry);
     this.allExtensions = allDesc.filter((desc) => desc.kind === "extension");
@@ -157,9 +157,21 @@ class Reflector implements ServiceImpl<typeof ServerReflection> {
     sent: Set<string>,
     symbol: string,
   ): MessageResponse {
-    const desc = this.registry.get(symbol);
+    let desc = this.registry.get(symbol);
     if (desc === undefined) {
-      return createNotFoundResponse("file not found");
+      // Could be a method
+      const lastDot = symbol.lastIndexOf(".");
+      if (lastDot < 0) {
+        return createNotFoundResponse("symbol not found");
+      }
+      desc = this.registry.getService(symbol.substring(0, lastDot));
+      const methodName = symbol.substring(lastDot + 1);
+      if (
+        desc === undefined ||
+        desc.methods.find((m) => m.name === methodName) === undefined
+      ) {
+        return createNotFoundResponse("symbol not found");
+      }
     }
     return {
       case: "fileDescriptorResponse",
