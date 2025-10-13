@@ -34,6 +34,7 @@ import {
   type ServiceResponseSchema,
 } from "./gen/grpc/reflection/v1/reflection_pb.js";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
+import { createFileRegistry } from "./registry.js";
 
 /**
  * Options that can be passed to registerReflectionServices.
@@ -42,7 +43,7 @@ export interface ReflectionServiceOptions {
   /**
    * The protobuf file registry to resolve file descriptor sets.
    */
-  registry: FileRegistry;
+  registry: FileRegistry | DescFile[];
   /**
    * The services to expose. Array of DescService or the fully qualified name of a service.
    * The full descriptors of the named services should be part of the registry.
@@ -62,10 +63,11 @@ export function registerReflectionServices(
   router: ConnectRouter,
   options: ReflectionServiceOptions,
 ) {
-  router.service(
-    ServerReflection,
-    new Reflector(options.registry, options.services),
-  );
+  let registry = options.registry;
+  if (Array.isArray(registry)) {
+    registry = createFileRegistry(registry);
+  }
+  router.service(ServerReflection, new Reflector(registry, options.services));
 }
 
 type MessageResponse = MessageInitShape<

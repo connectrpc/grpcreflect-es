@@ -16,8 +16,6 @@ import * as http2 from "node:http2";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { UserService, file_example_v1_user } from "./gen/example/v1/user_pb.js";
 import { registerReflectionServices } from "@connectrpc/grpcreflect";
-import { create, createFileRegistry } from "@bufbuild/protobuf";
-import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 
 const server = http2.createServer(
   connectNodeAdapter({
@@ -30,11 +28,7 @@ const server = http2.createServer(
         };
       });
       registerReflectionServices(router, {
-        registry: createFileRegistry(
-          create(FileDescriptorSetSchema, {
-            file: [file_example_v1_user.proto],
-          }),
-        ),
+        registry: [file_example_v1_user],
       });
     },
   }),
