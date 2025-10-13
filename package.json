@@ -10,7 +10,7 @@
     "license-header": "license-header --ignore 'packages/**'",
     "lint": "biome lint --error-on-warnings"
   },
-  "workspaces": ["packages/grpcreflect"],
+  "workspaces": ["packages/grpcreflect", "packages/example"],
   "type": "module",
   "packageManager": "npm@10.9.0",
   "licenseHeader": {
