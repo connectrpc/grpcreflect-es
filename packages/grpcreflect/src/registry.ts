@@ -36,10 +36,10 @@ export function createFileRegistry(files: DescFile[]): FileRegistry {
 
 function addToMap(map: Map<string, DescFile>, files: DescFile[]) {
   for (const file of files) {
-    if (map.has(file.name)) {
+    if (map.has(file.proto.name)) {
       continue;
     }
-    map.set(file.name, file);
+    map.set(file.proto.name, file);
     addToMap(map, file.dependencies);
   }
 }

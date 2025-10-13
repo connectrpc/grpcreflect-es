@@ -28,7 +28,7 @@ const server = http2.createServer(
         };
       });
       registerReflectionServices(router, {
-        registry: [file_example_v1_user],
+        files: [file_example_v1_user],
       });
     },
   }),

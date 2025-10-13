@@ -42,9 +42,9 @@ import * as alpha from "./gen/grpc/reflection/v1alpha/reflection_pb.js";
  */
 export interface ReflectionServiceOptions {
   /**
-   * The protobuf file registry to resolve file descriptor sets.
+   * The DescFile array to source file descriptors.
    */
-  registry: FileRegistry | DescFile[];
+  files: DescFile[];
   /**
    * The services to expose. Array of DescService or the fully qualified name of a service.
    * The full descriptors of the named services should be part of the registry.
@@ -64,11 +64,10 @@ export function registerReflectionServices(
   router: ConnectRouter,
   options: ReflectionServiceOptions,
 ) {
-  let registry = options.registry;
-  if (Array.isArray(registry)) {
-    registry = createFileRegistry(registry);
-  }
-  const reflector = new Reflector(registry, options.services);
+  const reflector = new Reflector(
+    createFileRegistry(options.files),
+    options.services,
+  );
   router.service(ServerReflection, reflector);
   router.service(alpha.ServerReflection, reflector);
 }

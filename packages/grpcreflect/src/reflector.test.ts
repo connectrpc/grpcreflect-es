@@ -326,7 +326,7 @@ async function testReflection(
     const transport = createRouterTransport((router) =>
       registerReflectionServices(router, {
         services: options?.services,
-        registry: options?.registry ?? registry,
+        files: options?.files ?? Array.from(registry.files),
       }),
     );
     await test("v1", async () => {
