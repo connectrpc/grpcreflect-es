@@ -24,6 +24,7 @@ import {
   type ServerReflectionRequestSchema,
   ServerReflectionResponseSchema,
 } from "./gen/grpc/reflection/v1/reflection_pb.js";
+import * as alpha from "./gen/grpc/reflection/v1alpha/reflection_pb.js";
 import * as assert from "node:assert/strict";
 import { createAsyncIterable } from "@connectrpc/connect/protocol";
 import {
@@ -309,28 +310,51 @@ void suite("allExtensionNumbersOfType", () => {
 
 async function testReflection(
   name: string,
-  requests: MessageInitShape<typeof ServerReflectionRequestSchema>[],
-  responses: MessageInitShape<typeof ServerReflectionResponseSchema>[],
+  // biome-ignore format: Long type
+  requests: (
+    MessageInitShape<typeof ServerReflectionRequestSchema> &
+    MessageInitShape<typeof alpha.ServerReflectionRequestSchema>
+  )[],
+  // biome-ignore format: Long type
+  responses: (
+    MessageInitShape<typeof ServerReflectionResponseSchema> &
+    MessageInitShape<typeof alpha.ServerReflectionResponseSchema>
+  )[],
   options?: Partial<ReflectionServiceOptions>,
 ) {
   await test(name, async () => {
-    const client = createClient(
-      ServerReflection,
-      createRouterTransport((router) =>
-        registerReflectionServices(router, {
-          services: options?.services,
-          registry: options?.registry ?? registry,
-        }),
-      ),
+    const transport = createRouterTransport((router) =>
+      registerReflectionServices(router, {
+        services: options?.services,
+        registry: options?.registry ?? registry,
+      }),
     );
-    for await (const actual of client.serverReflectionInfo(
-      createAsyncIterable([...requests]),
-    )) {
-      const expected = responses.shift();
-      assert.ok(expected);
-      expected.originalRequest = requests.shift();
-      assertProtoEqual(ServerReflectionResponseSchema, actual, expected);
-    }
+    await test("v1", async () => {
+      const client = createClient(ServerReflection, transport);
+      for await (const actual of client.serverReflectionInfo(
+        createAsyncIterable([...requests]),
+      )) {
+        const expected = responses.shift();
+        assert.ok(expected);
+        expected.originalRequest = requests.shift();
+        assertProtoEqual(ServerReflectionResponseSchema, actual, expected);
+      }
+    });
+    await test("v1alpha", async () => {
+      const client = createClient(alpha.ServerReflection, transport);
+      for await (const actual of client.serverReflectionInfo(
+        createAsyncIterable([...requests]),
+      )) {
+        const expected = responses.shift();
+        assert.ok(expected);
+        expected.originalRequest = requests.shift();
+        assertProtoEqual(
+          alpha.ServerReflectionResponseSchema,
+          actual,
+          expected,
+        );
+      }
+    });
   });
 }
 
