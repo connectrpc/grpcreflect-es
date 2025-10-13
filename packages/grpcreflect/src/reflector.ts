@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import {
-  create,
   type DescExtension,
   type DescFile,
   type DescService,
@@ -23,17 +22,19 @@ import {
 } from "@bufbuild/protobuf";
 import {
   Code,
+  ConnectError,
   type ConnectRouter,
   type ServiceImpl,
 } from "@connectrpc/connect";
-import { ServerReflectionResponseSchema } from "./gen/grpc/reflection/v1/reflection_pb.js";
 import {
   ServerReflection,
   type ExtensionRequest,
   type ServerReflectionRequest,
   type ServiceResponseSchema,
+  type ServerReflectionResponseSchema,
 } from "./gen/grpc/reflection/v1/reflection_pb.js";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
+import * as alpha from "./gen/grpc/reflection/v1alpha/reflection_pb.js";
 
 /**
  * Options that can be passed to registerReflectionServices.
@@ -62,17 +63,23 @@ export function registerReflectionServices(
   router: ConnectRouter,
   options: ReflectionServiceOptions,
 ) {
-  router.service(
-    ServerReflection,
-    new Reflector(options.registry, options.services),
-  );
+  const reflector = new Reflector(options.registry, options.services);
+  router.service(ServerReflection, reflector);
+  router.service(alpha.ServerReflection, reflector);
 }
 
-type MessageResponse = MessageInitShape<
-  typeof ServerReflectionResponseSchema
->["messageResponse"];
+// biome-ignore format: Long type
+type ResponseCommon = 
+  MessageInitShape<typeof ServerReflectionResponseSchema> &
+  MessageInitShape<typeof alpha.ServerReflectionResponseSchema>
 
-class Reflector implements ServiceImpl<typeof ServerReflection> {
+type MessageResponse = ResponseCommon["messageResponse"];
+
+class Reflector
+  implements
+    ServiceImpl<typeof ServerReflection>,
+    ServiceImpl<typeof ServerReflection>
+{
   private allExtensions: DescExtension[];
   private exposedServices: MessageInitShape<typeof ServiceResponseSchema>[];
   constructor(
@@ -99,7 +106,11 @@ class Reflector implements ServiceImpl<typeof ServerReflection> {
     }
   }
 
-  async *serverReflectionInfo(stream: AsyncIterable<ServerReflectionRequest>) {
+  async *serverReflectionInfo(
+    stream:
+      | AsyncIterable<ServerReflectionRequest>
+      | AsyncIterable<alpha.ServerReflectionRequest>,
+  ): AsyncIterable<ResponseCommon> {
     const sent = new Set<string>();
     for await (const req of stream) {
       let messageResponse: MessageResponse;
@@ -130,12 +141,17 @@ class Reflector implements ServiceImpl<typeof ServerReflection> {
         case "listServices":
           messageResponse = this.handleListServices();
           break;
+        default:
+          throw new ConnectError(
+            "unsupported reflection message request",
+            Code.InvalidArgument,
+          );
       }
-      yield create(ServerReflectionResponseSchema, {
-        validHost: req.host,
-        originalRequest: req,
+      yield {
         messageResponse,
-      });
+        validHost: req.host,
+        originalRequest: req as unknown as ResponseCommon["originalRequest"],
+      };
     }
   }
 
@@ -183,7 +199,7 @@ class Reflector implements ServiceImpl<typeof ServerReflection> {
 
   private handleFileContainingExtension(
     sent: Set<string>,
-    extension: ExtensionRequest,
+    extension: ExtensionRequest | alpha.ExtensionRequest,
   ): MessageResponse {
     const extendee = this.registry.getMessage(extension.containingType);
     const desc =
@@ -221,7 +237,7 @@ class Reflector implements ServiceImpl<typeof ServerReflection> {
     return {
       case: "listServicesResponse",
       value: { service: this.exposedServices },
-    };
+    } as MessageResponse;
   }
 }
 
