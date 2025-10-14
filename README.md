@@ -19,7 +19,28 @@ npm install @connectrpc/grpcreflect
 
 ## A small example
 
-TODO: 
+```ts
+// HTTP/2 is required, because reflection API uses BiDi RPC.
+import * as http2 from "node:http2"; 
+import { connectNodeAdapter } from "@connectrpc/connect-node";
+import { registerReflectionServices } from "@connectrpc/grpcreflect";
+import { UserService, file_example_v1_user } from "./gen/example/v1/user_pb.js";
+
+const server = http2.createServer(
+  connectNodeAdapter({
+    routes: (router) => {
+      // Register your service handlers     
+      ...
+      // Register reflection services
+      registerReflectionServices(router, {
+        files: [file_example_v1_user],
+      });
+    },
+  }),
+);
+
+server.listen(8080);
+```
 
 ## Ecosystem
 
