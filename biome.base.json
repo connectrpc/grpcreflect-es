@@ -1,34 +1,40 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.6/schema.json",
   "vcs": {
     "enabled": false,
     "clientKind": "git",
     "useIgnoreFile": true
   },
   "files": {
-    "ignoreUnknown": false,
-    "ignore": ["tsconfig.*.json", "src/gen/**", "packages/*/dist/**", ".turbo"]
+    "includes": [
+      "**",
+      "!**/tsconfig.*.json",
+      "!**/src/gen",
+      "!**/dist",
+      "!**/.turbo",
+      "!**/node_modules"
+    ]
   },
   "formatter": {
     "indentStyle": "space"
   },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
+  },
   "linter": {
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "style": {
         "useTemplate": "off",
-        "useConst": "off",
         "noParameterAssign": "off",
-        "useSingleVarDeclarator": "off",
-        "useNumberNamespace": "off",
-        "noUnusedTemplateLiteral": "off"
-      },
-      "correctness": {
-        "noSwitchDeclarations": "off"
+        "useNumberNamespace": "off"
       },
       "suspicious": {
-        "noDoubleEquals": "off",
-        "noFallthroughSwitchClause": "off"
+        "noDoubleEquals": "off"
       }
     }
   }

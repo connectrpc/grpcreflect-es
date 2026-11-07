@@ -1,4 +1,4 @@
-// Copyright 2025 The Connect Authors
+// Copyright 2025-2026 The Connect Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,231 +12,257 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import * as assert from "node:assert/strict";
 import { suite, test } from "node:test";
-import { compileFiles } from "@bufbuild/protocompile";
-import { createClient, createRouterTransport } from "@connectrpc/connect";
 import {
-  registerReflectionServices,
-  type ReflectionServiceOptions,
-} from "./reflector.js";
+  create,
+  type DescFile,
+  equals,
+  fromBinary,
+  type MessageInitShape,
+  toBinary,
+} from "@bufbuild/protobuf";
+import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import {
+  Code,
+  ConnectError,
+  type ConnectRouter,
+  createClient,
+  createRouterTransport,
+} from "@connectrpc/connect";
+import { createAsyncIterable } from "@connectrpc/connect/protocol";
+import {
+  file_grpc_reflection_v1_reflection,
   ServerReflection,
-  type ServerReflectionRequestSchema,
+  ServerReflectionRequestSchema,
+  type ServerReflectionResponse,
   ServerReflectionResponseSchema,
 } from "./gen/grpc/reflection/v1/reflection_pb.js";
 import * as alpha from "./gen/grpc/reflection/v1alpha/reflection_pb.js";
-import * as assert from "node:assert/strict";
-import { createAsyncIterable } from "@connectrpc/connect/protocol";
 import {
-  create,
-  equals,
-  toBinary,
-  type DescMessage,
-  type MessageInitShape,
-} from "@bufbuild/protobuf";
-import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
+  file_test_standalone_standalone,
+  StandaloneService,
+} from "./gen/test/standalone/standalone_pb.js";
+import { file_test_v2_extensions } from "./gen/test/v2/extensions_pb.js";
+import { file_test_v2_types } from "./gen/test/v2/types_pb.js";
+import { file_test_v3_service, TestService } from "./gen/test/v3/service_pb.js";
+import { registerReflectionServices } from "./reflector.js";
 
-const registry = compileFiles({
-  "proto3/service.proto": `
-        syntax = "proto3";
-        package test.v3;
+/**
+ * Registers the test services, and the reflection services. The file with
+ * extensions is not used by any service, so it is passed explicitly.
+ */
+function defaultRoutes(router: ConnectRouter): void {
+  router.service(TestService, {});
+  router.service(StandaloneService, {});
+  registerReflectionServices(router, { files: [file_test_v2_extensions] });
+}
 
-        import "proto2/types.proto";
+// All services registered by defaultRoutes, in sorted order.
+const allServices = [
+  { name: "grpc.reflection.v1.ServerReflection" },
+  { name: "grpc.reflection.v1alpha.ServerReflection" },
+  { name: "test.standalone.StandaloneService" },
+  { name: "test.v3.TestService" },
+];
 
-        service TestService {
-            rpc Query(QueryRequest) returns (QueryResponse);
-        }
+// biome-ignore format: Long type
+type RequestInit =
+  & MessageInitShape<typeof ServerReflectionRequestSchema>
+  & MessageInitShape<typeof alpha.ServerReflectionRequestSchema>;
 
-        message QueryRequest {
-            string query = 1;
-        }
-
-        message QueryResponse {
-            test.v2.DataItem item = 1;
-        }
-    `,
-  "proto2/types.proto": `
-        syntax = "proto2";
-        package test.v2;
-
-        message DataItem {
-            required string id = 1;
-            optional string name = 2;
-            extensions 100 to 199;
-        }
-    `,
-  "proto2/extensions.proto": `
-        syntax = "proto2";
-        package test.v2;
-
-        import "proto2/types.proto";
-
-        extend DataItem {
-            optional string custom_field = 100;
-        }
-    `,
-  "proto2/standalone.proto": `
-        syntax = "proto2";
-        package test.standalone;
-
-        service StandaloneService {
-            rpc Process(Request) returns (Response);
-        }
-
-        message Request {
-            required string input = 1;
-            optional int32 timeout = 2 [default = 30];
-        }
-
-        message Response {
-            required bool success = 1;
-            optional string result = 2;
-        }
-    `,
-});
-
-const protoFiles = extractFileProtos([
-  "proto3/service",
-  "proto2/types",
-  "proto2/extensions",
-  "proto2/standalone",
-]);
+type ResponseInit = Pick<
+  MessageInitShape<typeof ServerReflectionResponseSchema>,
+  "validHost" | "messageResponse"
+>;
 
 void suite("listServices", () => {
-  void testReflection(
-    "exposes all services by default",
-    [{ messageRequest: { case: "listServices", value: "" } }],
+  const request: RequestInit = {
+    messageRequest: { case: "listServices", value: "" },
+  };
+  testReflection(
+    "lists all services on the router by default",
+    [request],
+    [
+      {
+        messageResponse: {
+          case: "listServicesResponse",
+          value: { service: allServices },
+        },
+      },
+    ],
+  );
+  testReflection(
+    "lists services registered after the reflection services",
+    [request],
     [
       {
         messageResponse: {
           case: "listServicesResponse",
           value: {
             service: [
-              { name: "test.standalone.StandaloneService" },
+              { name: "grpc.reflection.v1.ServerReflection" },
+              { name: "grpc.reflection.v1alpha.ServerReflection" },
               { name: "test.v3.TestService" },
             ],
           },
         },
       },
     ],
+    (router) => {
+      registerReflectionServices(router);
+      router.service(TestService, {});
+    },
   );
-  void testReflection(
-    "limits to exposed",
-    [{ messageRequest: { case: "listServices", value: "" } }],
+  testReflection(
+    "limits to exposed service names",
+    [request],
     [
       {
         messageResponse: {
           case: "listServicesResponse",
-          value: {
-            service: [{ name: "test.standalone.StandaloneService" }],
-          },
+          value: { service: [{ name: "test.standalone.StandaloneService" }] },
         },
       },
     ],
-    { services: ["test.standalone.StandaloneService"] },
+    (router) => {
+      router.service(TestService, {});
+      router.service(StandaloneService, {});
+      registerReflectionServices(router, {
+        services: ["test.standalone.StandaloneService"],
+      });
+    },
   );
+  testReflection(
+    "limits to exposed service descriptors, and includes their files",
+    [
+      request,
+      {
+        messageRequest: {
+          case: "fileContainingSymbol",
+          value: "test.standalone.StandaloneService",
+        },
+      },
+    ],
+    [
+      {
+        messageResponse: {
+          case: "listServicesResponse",
+          value: { service: [{ name: "test.standalone.StandaloneService" }] },
+        },
+      },
+      fileDescriptorResponse(file_test_standalone_standalone),
+    ],
+    (router) =>
+      registerReflectionServices(router, { services: [StandaloneService] }),
+  );
+  for (const version of ["v1", "v1alpha"] as const) {
+    void test(`fails for exposed services that are unknown (${version})`, async () => {
+      await assert.rejects(
+        reflect(version, [request], (router) =>
+          registerReflectionServices(router, { services: ["test.Unknown"] }),
+        ),
+        (e) =>
+          e instanceof ConnectError &&
+          e.code === Code.Internal &&
+          e.rawMessage.includes('"test.Unknown"'),
+      );
+    });
+  }
 });
 
 void suite("fileByFilename", () => {
-  void testReflection(
-    "returns file descriptor for proto3 file",
+  testReflection(
+    "returns file with its dependencies",
     [
       {
         messageRequest: {
           case: "fileByFilename",
-          value: "proto3/service.proto",
+          value: "test/v3/service.proto",
         },
       },
     ],
+    [fileDescriptorResponse(file_test_v3_service, file_test_v2_types)],
+  );
+  testReflection(
+    "returns a file passed in options",
     [
       {
-        messageResponse: {
-          case: "fileDescriptorResponse",
-          value: {
-            fileDescriptorProto: [
-              protoFiles["proto3/service"],
-              protoFiles["proto2/types"],
-            ],
-          },
+        messageRequest: {
+          case: "fileByFilename",
+          value: "test/v2/extensions.proto",
         },
       },
     ],
+    [fileDescriptorResponse(file_test_v2_extensions, file_test_v2_types)],
+  );
+  testReflection(
+    "returns a dependency of a service file",
+    [
+      {
+        messageRequest: {
+          case: "fileByFilename",
+          value: "test/v2/types.proto",
+        },
+      },
+    ],
+    [fileDescriptorResponse(file_test_v2_types)],
+    (router) => {
+      router.service(TestService, {});
+      registerReflectionServices(router);
+    },
+  );
+  testReflection(
+    "returns not found for unknown file",
+    [{ messageRequest: { case: "fileByFilename", value: "unknown.proto" } }],
+    [notFoundResponse("file not found")],
   );
 });
 
 void suite("fileContainingSymbol", () => {
-  void testReflection(
-    "returns file for service symbol",
+  const cases: [string, DescFile[]][] = [
+    ["test.v3.TestService", [file_test_v3_service, file_test_v2_types]],
+    ["test.v3.TestService.Query", [file_test_v3_service, file_test_v2_types]],
+    ["test.v3.QueryRequest", [file_test_v3_service, file_test_v2_types]],
+    ["test.v3.QueryRequest.query", [file_test_v3_service, file_test_v2_types]],
+    ["test.v3.QueryRequest.filter", [file_test_v3_service, file_test_v2_types]],
+    ["test.v3.QueryKind", [file_test_v3_service, file_test_v2_types]],
+    ["test.v3.QUERY_KIND_FULL", [file_test_v3_service, file_test_v2_types]],
+    ["test.v2.DataItem", [file_test_v2_types]],
+    ["test.v2.custom_field", [file_test_v2_extensions, file_test_v2_types]],
     [
-      {
-        messageRequest: {
-          case: "fileContainingSymbol",
-          value: "test.v3.TestService",
-        },
-      },
+      "grpc.reflection.v1.ServerReflection",
+      [file_grpc_reflection_v1_reflection],
     ],
     [
-      {
-        messageResponse: {
-          case: "fileDescriptorResponse",
-          value: {
-            fileDescriptorProto: [
-              protoFiles["proto3/service"],
-              protoFiles["proto2/types"],
-            ],
-          },
-        },
-      },
+      "grpc.reflection.v1alpha.ServerReflection.ServerReflectionInfo",
+      [alpha.file_grpc_reflection_v1alpha_reflection],
     ],
-  );
-
-  void testReflection(
-    "returns file for message symbol",
-    [
-      {
-        messageRequest: {
-          case: "fileContainingSymbol",
-          value: "test.v2.DataItem",
-        },
-      },
-    ],
-    [
-      {
-        messageResponse: {
-          case: "fileDescriptorResponse",
-          value: {
-            fileDescriptorProto: [protoFiles["proto2/types"]],
-          },
-        },
-      },
-    ],
-  );
-
-  void testReflection(
-    "returns file for method symbol",
-    [
-      {
-        messageRequest: {
-          case: "fileContainingSymbol",
-          value: "test.standalone.StandaloneService.Process",
-        },
-      },
-    ],
-    [
-      {
-        messageResponse: {
-          case: "fileDescriptorResponse",
-          value: {
-            fileDescriptorProto: [protoFiles["proto2/standalone"]],
-          },
-        },
-      },
-    ],
-  );
+  ];
+  for (const [symbol, expected] of cases) {
+    testReflection(
+      `returns file for ${symbol}`,
+      [{ messageRequest: { case: "fileContainingSymbol", value: symbol } }],
+      [fileDescriptorResponse(...expected)],
+    );
+  }
+  for (const symbol of [
+    "test.v3.Unknown",
+    "test.v3.TestService.Unknown",
+    "test.v3.QueryRequest.unknown",
+    "test.v3.QueryKind.QUERY_KIND_FULL",
+    "Unknown",
+  ]) {
+    testReflection(
+      `returns not found for ${symbol}`,
+      [{ messageRequest: { case: "fileContainingSymbol", value: symbol } }],
+      [notFoundResponse("symbol not found")],
+    );
+  }
 });
 
 void suite("fileContainingExtension", () => {
-  void testReflection(
+  testReflection(
     "returns file containing extension",
     [
       {
@@ -246,24 +272,36 @@ void suite("fileContainingExtension", () => {
         },
       },
     ],
+    [fileDescriptorResponse(file_test_v2_extensions, file_test_v2_types)],
+  );
+  testReflection(
+    "returns not found for unknown extension number",
     [
       {
-        messageResponse: {
-          case: "fileDescriptorResponse",
-          value: {
-            fileDescriptorProto: [
-              protoFiles["proto2/extensions"],
-              protoFiles["proto2/types"],
-            ],
-          },
+        messageRequest: {
+          case: "fileContainingExtension",
+          value: { containingType: "test.v2.DataItem", extensionNumber: 101 },
         },
       },
     ],
+    [notFoundResponse("extension not found")],
+  );
+  testReflection(
+    "returns not found for unknown type",
+    [
+      {
+        messageRequest: {
+          case: "fileContainingExtension",
+          value: { containingType: "test.v2.Unknown", extensionNumber: 100 },
+        },
+      },
+    ],
+    [notFoundResponse("extension not found")],
   );
 });
 
 void suite("allExtensionNumbersOfType", () => {
-  void testReflection(
+  testReflection(
     "returns all extension numbers for type",
     [
       {
@@ -277,16 +315,13 @@ void suite("allExtensionNumbersOfType", () => {
       {
         messageResponse: {
           case: "allExtensionNumbersResponse",
-          value: {
-            baseTypeName: "test.v2.DataItem",
-            extensionNumber: [100],
-          },
+          value: { baseTypeName: "test.v2.DataItem", extensionNumber: [100] },
         },
       },
     ],
   );
-  void testReflection(
-    "returns empty for a type with not extensions",
+  testReflection(
+    "returns empty for a type without extensions",
     [
       {
         messageRequest: {
@@ -299,93 +334,154 @@ void suite("allExtensionNumbersOfType", () => {
       {
         messageResponse: {
           case: "allExtensionNumbersResponse",
-          value: {
-            baseTypeName: "test.v3.QueryRequest",
-          },
+          value: { baseTypeName: "test.v3.QueryRequest" },
+        },
+      },
+    ],
+  );
+  testReflection(
+    "returns not found for unknown type",
+    [
+      {
+        messageRequest: {
+          case: "allExtensionNumbersOfType",
+          value: "test.v2.Unknown",
+        },
+      },
+    ],
+    [notFoundResponse("type not found")],
+  );
+});
+
+void suite("stream", () => {
+  testReflection(
+    "does not send dependencies twice on the same stream",
+    [
+      {
+        messageRequest: {
+          case: "fileContainingSymbol",
+          value: "test.v3.TestService",
+        },
+      },
+      {
+        messageRequest: {
+          case: "fileByFilename",
+          value: "test/v2/extensions.proto",
+        },
+      },
+      {
+        messageRequest: {
+          case: "fileByFilename",
+          value: "test/v2/types.proto",
+        },
+      },
+    ],
+    [
+      fileDescriptorResponse(file_test_v3_service, file_test_v2_types),
+      fileDescriptorResponse(file_test_v2_extensions),
+      fileDescriptorResponse(file_test_v2_types),
+    ],
+  );
+  testReflection(
+    "echoes host as valid host",
+    [
+      {
+        host: "example.com",
+        messageRequest: { case: "listServices", value: "" },
+      },
+    ],
+    [
+      {
+        validHost: "example.com",
+        messageResponse: {
+          case: "listServicesResponse",
+          value: { service: allServices },
         },
       },
     ],
   );
 });
 
-async function testReflection(
+/**
+ * Registers a test for every version of the reflection service.
+ */
+function testReflection(
   name: string,
-  // biome-ignore format: Long type
-  requests: (
-    MessageInitShape<typeof ServerReflectionRequestSchema> &
-    MessageInitShape<typeof alpha.ServerReflectionRequestSchema>
-  )[],
-  // biome-ignore format: Long type
-  responses: (
-    MessageInitShape<typeof ServerReflectionResponseSchema> &
-    MessageInitShape<typeof alpha.ServerReflectionResponseSchema>
-  )[],
-  options?: Partial<ReflectionServiceOptions>,
-) {
-  await test(name, async () => {
-    const transport = createRouterTransport((router) =>
-      registerReflectionServices(router, {
-        services: options?.services,
-        files: options?.files ?? Array.from(registry.files),
-      }),
-    );
-    await test("v1", async () => {
-      const client = createClient(ServerReflection, transport);
-      for await (const actual of client.serverReflectionInfo(
-        createAsyncIterable([...requests]),
-      )) {
-        const expected = responses.shift();
-        assert.ok(expected);
-        expected.originalRequest = requests.shift();
-        assertProtoEqual(ServerReflectionResponseSchema, actual, expected);
-      }
-    });
-    await test("v1alpha", async () => {
-      const client = createClient(alpha.ServerReflection, transport);
-      for await (const actual of client.serverReflectionInfo(
-        createAsyncIterable([...requests]),
-      )) {
-        const expected = responses.shift();
-        assert.ok(expected);
-        expected.originalRequest = requests.shift();
-        assertProtoEqual(
-          alpha.ServerReflectionResponseSchema,
-          actual,
-          expected,
+  requests: RequestInit[],
+  expected: ResponseInit[],
+  routes: (router: ConnectRouter) => void = defaultRoutes,
+): void {
+  for (const version of ["v1", "v1alpha"] as const) {
+    void test(`${name} (${version})`, async () => {
+      const actual = await reflect(version, requests, routes);
+      assert.equal(actual.length, expected.length);
+      for (const [i, response] of actual.entries()) {
+        const want = create(ServerReflectionResponseSchema, expected[i]);
+        want.originalRequest = create(
+          ServerReflectionRequestSchema,
+          requests[i],
         );
+        if (!equals(ServerReflectionResponseSchema, response, want)) {
+          assert.deepEqual(response, want);
+        }
       }
     });
-  });
-}
-
-function assertProtoEqual<Desc extends DescMessage>(
-  desc: Desc,
-  actualInit: MessageInitShape<Desc>,
-  expectedInit: MessageInitShape<Desc>,
-) {
-  const actual = create(desc, actualInit);
-  const expected = create(desc, expectedInit);
-  if (!equals(desc, actual, expected)) {
-    assert.deepEqual(actual, expected);
   }
 }
 
-function extractFileProtos<const T extends readonly string[]>(
-  fileNames: T,
-): { [K in T[number]]: Uint8Array } {
-  const files = Array.from(registry.files);
-  const result = {} as { [K in T[number]]: Uint8Array };
-
-  for (const fileName of fileNames) {
-    const file = files.find((f) => f.name === fileName);
-    if (!file) {
-      throw new Error(`File not found: ${fileName}`);
+/**
+ * Sends the given requests on a single stream, and returns the responses.
+ * Since v1 and v1alpha are wire compatible, v1alpha responses are converted
+ * to v1 for comparison.
+ */
+async function reflect(
+  version: "v1" | "v1alpha",
+  requests: RequestInit[],
+  routes: (router: ConnectRouter) => void,
+): Promise<ServerReflectionResponse[]> {
+  const transport = createRouterTransport(routes);
+  const responses: ServerReflectionResponse[] = [];
+  if (version === "v1") {
+    const client = createClient(ServerReflection, transport);
+    for await (const res of client.serverReflectionInfo(
+      createAsyncIterable(requests),
+    )) {
+      responses.push(res);
     }
-    result[fileName as T[number]] = toBinary(
-      FileDescriptorProtoSchema,
-      file.proto,
-    );
+  } else {
+    const client = createClient(alpha.ServerReflection, transport);
+    for await (const res of client.serverReflectionInfo(
+      createAsyncIterable(requests),
+    )) {
+      responses.push(
+        fromBinary(
+          ServerReflectionResponseSchema,
+          toBinary(alpha.ServerReflectionResponseSchema, res),
+        ),
+      );
+    }
   }
+  return responses;
+}
 
-  return result;
+function fileDescriptorResponse(...files: DescFile[]): ResponseInit {
+  return {
+    messageResponse: {
+      case: "fileDescriptorResponse",
+      value: {
+        fileDescriptorProto: files.map((file) =>
+          toBinary(FileDescriptorProtoSchema, file.proto),
+        ),
+      },
+    },
+  };
+}
+
+function notFoundResponse(errorMessage: string): ResponseInit {
+  return {
+    messageResponse: {
+      case: "errorResponse",
+      value: { errorCode: Code.NotFound, errorMessage },
+    },
+  };
 }

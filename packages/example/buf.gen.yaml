@@ -1,4 +1,3 @@
-# buf.gen.yaml
 version: v2
 inputs:
   - directory: proto
@@ -9,6 +8,5 @@ plugins:
   - local: protoc-gen-es
     opt:
       - target=ts
+      - import_extension=js
     out: src/gen
-    # Also generate any imported dependencies
-    include_imports: true

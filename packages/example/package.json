@@ -7,21 +7,22 @@
     "start": "tsx src/index.ts",
     "generate": "buf generate",
     "postgenerate": "license-header src/gen",
-    "build": "tsc --project tsconfig.json --outDir ./dist/esm",
+    "build": "tsc --noEmit",
     "format": "biome format --write",
     "lint": "biome lint --error-on-warnings && buf lint",
     "license-header": "license-header"
   },
   "type": "module",
   "dependencies": {
-    "@bufbuild/protobuf": "^2.6.3",
-    "@connectrpc/connect": "^2.0.3",
-    "@connectrpc/connect-node": "^2.0.3",
+    "@bufbuild/protobuf": "^2.17.0",
+    "@connectrpc/connect": "^2.3.0",
+    "@connectrpc/connect-node": "^2.3.0",
     "@connectrpc/grpcreflect": "0.1.0"
   },
   "devDependencies": {
-    "@bufbuild/buf": "^1.56.0",
-    "@bufbuild/protoc-gen-es": "^2.6.3",
-    "@standard-schema/spec": "^1.0.0"
+    "@bufbuild/buf": "^1.75.0",
+    "@bufbuild/protoc-gen-es": "^2.17.0",
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15"
   }
 }

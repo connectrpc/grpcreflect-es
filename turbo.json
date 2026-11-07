@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "agentGuidance": false,
   "tasks": {
     "build": {
       "dependsOn": ["^build", "generate"],
@@ -9,7 +10,7 @@
     "generate": {
       "dependsOn": ["^build"],
       "inputs": [
-        "proto",
+        "proto/**",
         "buf.gen.yaml",
         "buf.yaml",
         "buf.lock",
@@ -19,6 +20,14 @@
       "outputLogs": "new-only"
     },
     "test": {
+      "dependsOn": ["^build", "generate"],
+      "cache": false
+    },
+    "test:workers": {
+      "dependsOn": ["^build", "generate"],
+      "cache": false
+    },
+    "test:browser": {
       "dependsOn": ["^build", "generate"],
       "cache": false
     },

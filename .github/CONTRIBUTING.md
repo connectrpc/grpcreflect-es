@@ -38,6 +38,25 @@ Make sure that the tests, linters, and other checks pass:
 npm run all
 ```
 
+`npm run all` covers Node.js and the TypeScript compatibility tests. To run the tests on other runtimes:
+
+```bash
+npx turbo run build -F @connectrpc/grpcreflect
+npm run test:bun --workspace packages/grpcreflect      # requires bun
+npx turbo run test:workers                             # Cloudflare Workers, via miniflare
+npx playwright install                                 # once, in packages/runtime-tests
+npx turbo run test:browser                             # Chromium, Firefox, and WebKit
+```
+
+## Repository layout
+
+- `packages/grpcreflect`: the published package, `@connectrpc/grpcreflect`. The tests are in `src/reflector.test.ts`, and use the Protobuf files in `proto/`.
+- `packages/example`: a runnable example server.
+- `packages/runtime-tests`: a smoke test of the built package on Node.js, Bun, Cloudflare Workers, and web browsers.
+- `packages/typescript-compat`: type checks of the built package with every supported TypeScript version. See its [README](../packages/typescript-compat/README.md).
+
+Code in `src/gen` directories is generated with `buf generate` (run `npx turbo run generate`). Don't edit it by hand.
+
 We're using `turborepo` to run tasks. If you haven't used it yet, take a look at
 [filtering and package scoping](https://turbo.build/repo/docs/crafting-your-repository/running-tasks).
 
@@ -52,7 +71,7 @@ git rebase upstream/main
 git checkout -b cool_new_feature
 ```
 
-Make your changes, then ensure that `make` still passes.
+Make your changes, then ensure that `npm run all` still passes.
 When you're satisfied with your changes, push them to your fork.
 
 ```

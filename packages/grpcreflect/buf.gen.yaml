@@ -3,12 +3,13 @@ inputs:
   - module: buf.build/grpc/grpc:0ee95b84c2c740b086a2b895a99887d4
     paths:
       - grpc/reflection
+  # Protobuf files used in tests only
+  - directory: proto
 clean: true
 plugins:
   - local: protoc-gen-es
     opt:
       - target=ts
-      - import_extension=.js
-      - ts_nocheck=false
+      - import_extension=js
     out: src/gen
     include_imports: true

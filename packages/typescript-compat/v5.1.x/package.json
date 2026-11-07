@@ -1,0 +1,14 @@
+{
+  "name": "ts5.1",
+  "private": true,
+  "scripts": {
+    "test": "node_modules/.bin/tsc --outDir dist"
+  },
+  "dependencies": {
+    "@connectrpc/grpcreflect": "*",
+    "grpcreflect-example": "*",
+    "grpcreflect-runtime-tests": "*",
+    "@types/node": "24.1.0",
+    "typescript": "5.1.x"
+  }
+}
