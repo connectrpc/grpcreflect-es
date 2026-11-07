@@ -108,7 +108,9 @@ registerReflectionServices(router, {
 
 Additional files to make available. The files of registered services, and all of their imports, are always included, so you only need this for files that no service imports. The most common case is a file that declares custom options or other extensions, so that clients can resolve them.
 
-Files given here take precedence over files with the same name from generated code. This is how you can [show comments](#showing-comments).
+### `fileDescriptorSet`
+
+A serialized `google.protobuf.FileDescriptorSet`, for example the output of `buf build`. Its files take precedence over files with the same name from generated code. Use it to [show comments](#showing-comments).
 
 ### `services`
 
@@ -120,25 +122,17 @@ This only affects listing. Clients can still describe any type in the available 
 
 By default, clients don't see the comments in your `.proto` files. Comments are part of the source code info in a file descriptor, and generated code leaves it out to keep bundles small.
 
-To serve comments, build a descriptor set that includes source code info, in the same step where you generate code:
+To serve comments, build a descriptor set in the same step where you generate code. `buf build` includes comments by default:
 
 ```bash
-buf build -o descriptors.binpb
+buf generate && buf build -o descriptors.binpb
 ```
 
-Then pass its files to `registerReflectionServices`. They take precedence over the files from generated code:
+Then pass it to `registerReflectionServices`:
 
 ```ts
-import { readFileSync } from "node:fs";
-import { createFileRegistry, fromBinary } from "@bufbuild/protobuf";
-import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-
-const descriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  readFileSync("descriptors.binpb"),
-);
 registerReflectionServices(router, {
-  files: Array.from(createFileRegistry(descriptorSet).files),
+  fileDescriptorSet: readFileSync("descriptors.binpb"),
 });
 ```
 
@@ -154,7 +148,12 @@ service UserService {
 }
 ```
 
-Make sure the descriptor set is built from the same `.proto` files as your generated code, or clients may see definitions that don't match your server.
+A few things to know:
+
+- Build the descriptor set from the same `.proto` files as your generated code, or clients may see definitions that don't match your server.
+- The descriptor set must include imports. `buf build` includes them by default; with `protoc`, use `--include_imports --include_source_info`.
+- An invalid descriptor set throws when you call `registerReflectionServices`, so a bad file fails at startup, not on the first request.
+- `fileDescriptorSet` takes bytes, not a path, so it works on any runtime. With a bundler, you can also import the file as bytes.
 
 ## Requirements and limitations
 

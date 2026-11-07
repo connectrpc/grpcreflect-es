@@ -13,13 +13,18 @@
 // limitations under the License.
 
 import {
+  createFileRegistry as createFileRegistryFromSet,
   type DescFile,
   type DescService,
   type FileRegistry,
+  fromBinary,
   type MessageInitShape,
   toBinary,
 } from "@bufbuild/protobuf";
-import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
+import {
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+} from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
 import {
   ServerReflection,
@@ -45,23 +50,28 @@ export interface ReflectionServiceOptions {
    *   files: [file_example_v1_options],
    * });
    * ```
-   *
-   * Files given here take precedence over files with the same name from
-   * generated code. Generated code doesn't include source code info, so
-   * clients can't show comments. To serve comments, build a descriptor set
-   * with `buf build -o descriptors.binpb`, and pass its files:
-   *
-   * ```ts
-   * const descriptorSet = fromBinary(
-   *   FileDescriptorSetSchema,
-   *   readFileSync("descriptors.binpb"),
-   * );
-   * registerReflectionServices(router, {
-   *   files: Array.from(createFileRegistry(descriptorSet).files),
-   * });
-   * ```
    */
   files?: readonly DescFile[] | undefined;
+  /**
+   * A serialized `google.protobuf.FileDescriptorSet`, for example built with
+   * `buf build -o descriptors.binpb`.
+   *
+   * Generated code doesn't include comments. Files in this set take
+   * precedence over files with the same name from generated code, so if the
+   * set includes source code info, clients can show your comments:
+   *
+   * ```ts
+   * registerReflectionServices(router, {
+   *   fileDescriptorSet: readFileSync("descriptors.binpb"),
+   * });
+   * ```
+   *
+   * The set must include imports. Build it from the same `.proto` files as
+   * your generated code, or clients may see definitions that don't match
+   * your server. An invalid set throws an error when
+   * registerReflectionServices is called.
+   */
+  fileDescriptorSet?: Uint8Array | undefined;
   /**
    * The services to list, given as service descriptors or fully qualified
    * names. By default, all services registered on the router are listed,
@@ -106,11 +116,16 @@ export function registerReflectionServices(
   router: ConnectRouter,
   options: ReflectionServiceOptions = {},
 ): void {
+  // Parse the descriptor set now, so that a bad file fails at startup.
+  const descriptorSetFiles =
+    options.fileDescriptorSet === undefined
+      ? []
+      : parseFileDescriptorSet(options.fileDescriptorSet);
   // Services can be registered after this call, so we create the reflector
   // on the first request, when all routes are known.
   let reflector: Reflector | undefined;
   const getReflector = () => {
-    reflector ??= createReflector(router, options);
+    reflector ??= createReflector(router, options, descriptorSetFiles);
     return reflector;
   };
   router.service(ServerReflection, {
@@ -139,19 +154,44 @@ async function* serverReflectionInfo<
   }
 }
 
+/**
+ * Parses a serialized FileDescriptorSet, and returns its files.
+ */
+function parseFileDescriptorSet(bytes: Uint8Array): DescFile[] {
+  let registry: FileRegistry;
+  try {
+    const set = fromBinary(FileDescriptorSetSchema, bytes);
+    for (const file of set.file) {
+      // A buf image is a valid FileDescriptorSet, but adds a field with
+      // buf-specific metadata to each file. Clients don't need it. Unknown
+      // fields nested in a file, for example custom options, are kept.
+      file.$unknown = undefined;
+    }
+    registry = createFileRegistryFromSet(set);
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `grpcreflect: invalid fileDescriptorSet: ${reason}. Expected a binary google.protobuf.FileDescriptorSet with imports, for example built with "buf build -o descriptors.binpb".`,
+    );
+  }
+  return Array.from(registry.files);
+}
+
 function createReflector(
   router: ConnectRouter,
   options: ReflectionServiceOptions,
+  descriptorSetFiles: readonly DescFile[],
 ): Reflector {
   // The router has one handler per method, so services repeat.
   const routerServices = new Map<string, DescService>();
   for (const { service } of router.handlers) {
     routerServices.set(service.typeName, service);
   }
-  // Files from options come first, so that they take precedence over files
-  // from generated code with the same name. This lets users serve files with
-  // source code info, which generated code strips.
+  // The first file with a given name wins. Files from the descriptor set come
+  // first, because they can include source code info, which generated code
+  // strips.
   const registry = createFileRegistry([
+    ...descriptorSetFiles,
     ...(options.files ?? []),
     ...Array.from(routerServices.values(), (service) => service.file),
     ...(options.services ?? []).flatMap((service) =>

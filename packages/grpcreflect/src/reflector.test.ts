@@ -33,6 +33,7 @@ import {
   ConnectError,
   type ConnectRouter,
   createClient,
+  createConnectRouter,
   createRouterTransport,
 } from "@connectrpc/connect";
 import { createAsyncIterable } from "@connectrpc/connect/protocol";
@@ -358,22 +359,31 @@ void suite("allExtensionNumbersOfType", () => {
   );
 });
 
-void suite("source code info", () => {
-  // Generated code strips source code info. This descriptor set is built with
-  // `buf build` from the same files, and includes it.
+void suite("fileDescriptorSet", () => {
+  // Built with `buf build` from the same files as the generated code. Unlike
+  // generated code, it includes source code info.
+  const fileDescriptorSet = readFileSync(
+    new URL("gen/test/descriptors.binpb", import.meta.url),
+  );
+  // The expected files, without the buf image metadata that the server strips.
   const withSourceInfo = createFileRegistry(
-    fromBinary(
-      FileDescriptorSetSchema,
-      readFileSync(new URL("gen/test/descriptors.binpb", import.meta.url)),
-    ),
+    fromBinary(FileDescriptorSetSchema, fileDescriptorSet, {
+      readUnknownFields: false,
+    }),
   );
   const serviceFile = withSourceInfo.getFile("test/v3/service.proto");
   const typesFile = withSourceInfo.getFile("test/v2/types.proto");
+  const extensionsFile = withSourceInfo.getFile("test/v2/extensions.proto");
   assert.ok(serviceFile?.proto.sourceCodeInfo);
   assert.ok(typesFile?.proto.sourceCodeInfo);
+  assert.ok(extensionsFile);
   assert.equal(file_test_v3_service.proto.sourceCodeInfo, undefined);
+  const routes = (router: ConnectRouter) => {
+    router.service(TestService, {});
+    registerReflectionServices(router, { fileDescriptorSet });
+  };
   testReflection(
-    "files given in options take precedence over generated code",
+    "takes precedence over generated code",
     [
       {
         messageRequest: {
@@ -383,13 +393,64 @@ void suite("source code info", () => {
       },
     ],
     [fileDescriptorResponse(serviceFile, typesFile)],
-    (router) => {
-      router.service(TestService, {});
-      registerReflectionServices(router, {
-        files: Array.from(withSourceInfo.files),
-      });
-    },
+    routes,
   );
+  testReflection(
+    "makes files available that no service imports",
+    [
+      {
+        messageRequest: {
+          case: "fileByFilename",
+          value: "test/v2/extensions.proto",
+        },
+      },
+    ],
+    [fileDescriptorResponse(extensionsFile, typesFile)],
+    routes,
+  );
+  void test("fails at registration for invalid bytes", () => {
+    assert.throws(
+      () =>
+        registerReflectionServices(createConnectRouter(), {
+          fileDescriptorSet: new TextEncoder().encode("not a descriptor set"),
+        }),
+      /^Error: grpcreflect: invalid fileDescriptorSet: .+ built with "buf build -o descriptors\.binpb"\.$/,
+    );
+  });
+  void test("fails at registration for missing imports", () => {
+    const withoutTypes = fromBinary(FileDescriptorSetSchema, fileDescriptorSet);
+    withoutTypes.file = withoutTypes.file.filter(
+      (f) => f.name !== "test/v2/types.proto",
+    );
+    assert.throws(
+      () =>
+        registerReflectionServices(createConnectRouter(), {
+          fileDescriptorSet: toBinary(FileDescriptorSetSchema, withoutTypes),
+        }),
+      /grpcreflect: invalid fileDescriptorSet: Cannot find test\/v2\/types\.proto/,
+    );
+  });
+  void test("omits buf image metadata", async () => {
+    const [response] = await reflect(
+      "v1",
+      [
+        {
+          messageRequest: {
+            case: "fileByFilename",
+            value: "test/v2/types.proto",
+          },
+        },
+      ],
+      routes,
+    );
+    assert.equal(response?.messageResponse.case, "fileDescriptorResponse");
+    const [bytes] = response.messageResponse.value.fileDescriptorProto;
+    assert.ok(bytes);
+    assert.equal(
+      fromBinary(FileDescriptorProtoSchema, bytes).$unknown,
+      undefined,
+    );
+  });
   void test("includes comments", async () => {
     const [response] = await reflect(
       "v1",
@@ -401,12 +462,7 @@ void suite("source code info", () => {
           },
         },
       ],
-      (router) => {
-        router.service(TestService, {});
-        registerReflectionServices(router, {
-          files: Array.from(withSourceInfo.files),
-        });
-      },
+      routes,
     );
     assert.equal(response?.messageResponse.case, "fileDescriptorResponse");
     const [bytes] = response.messageResponse.value.fileDescriptorProto;
