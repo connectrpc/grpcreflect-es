@@ -22,7 +22,9 @@ message User {
 }
 
 
+// Manages users.
 service UserService {
+  // Creates a new user.
   rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
 }
 

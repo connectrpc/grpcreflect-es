@@ -7,3 +7,6 @@
 **/*_pb.ts linguist-generated=true
 **/*_pb.js linguist-generated=true
 **/*_pb.d.ts linguist-generated=true
+
+# Binary descriptor sets
+*.binpb binary

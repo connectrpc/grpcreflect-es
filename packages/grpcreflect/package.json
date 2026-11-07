@@ -23,7 +23,7 @@
     "directory": "packages/grpcreflect"
   },
   "scripts": {
-    "generate": "buf generate",
+    "generate": "buf generate && buf build proto --output src/gen/test/descriptors.binpb",
     "postgenerate": "license-header src/gen",
     "test": "tsc --noEmit && tsx --test --test-reporter=tap src/*.test.ts",
     "test:bun": "bun test",

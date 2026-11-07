@@ -45,6 +45,21 @@ export interface ReflectionServiceOptions {
    *   files: [file_example_v1_options],
    * });
    * ```
+   *
+   * Files given here take precedence over files with the same name from
+   * generated code. Generated code doesn't include source code info, so
+   * clients can't show comments. To serve comments, build a descriptor set
+   * with `buf build -o descriptors.binpb`, and pass its files:
+   *
+   * ```ts
+   * const descriptorSet = fromBinary(
+   *   FileDescriptorSetSchema,
+   *   readFileSync("descriptors.binpb"),
+   * );
+   * registerReflectionServices(router, {
+   *   files: Array.from(createFileRegistry(descriptorSet).files),
+   * });
+   * ```
    */
   files?: readonly DescFile[] | undefined;
   /**
@@ -133,6 +148,9 @@ function createReflector(
   for (const { service } of router.handlers) {
     routerServices.set(service.typeName, service);
   }
+  // Files from options come first, so that they take precedence over files
+  // from generated code with the same name. This lets users serve files with
+  // source code info, which generated code strips.
   const registry = createFileRegistry([
     ...(options.files ?? []),
     ...Array.from(routerServices.values(), (service) => service.file),

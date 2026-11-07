@@ -108,11 +108,53 @@ registerReflectionServices(router, {
 
 Additional files to make available. The files of registered services, and all of their imports, are always included, so you only need this for files that no service imports. The most common case is a file that declares custom options or other extensions, so that clients can resolve them.
 
+Files given here take precedence over files with the same name from generated code. This is how you can [show comments](#showing-comments).
+
 ### `services`
 
 Limits the services that are listed, given as service descriptors or fully qualified names. The default is to list every service on the router, including the reflection services. Use this to hide services from `list`.
 
 This only affects listing. Clients can still describe any type in the available files, including unlisted services.
+
+## Showing comments
+
+By default, clients don't see the comments in your `.proto` files. Comments are part of the source code info in a file descriptor, and generated code leaves it out to keep bundles small.
+
+To serve comments, build a descriptor set that includes source code info, in the same step where you generate code:
+
+```bash
+buf build -o descriptors.binpb
+```
+
+Then pass its files to `registerReflectionServices`. They take precedence over the files from generated code:
+
+```ts
+import { readFileSync } from "node:fs";
+import { createFileRegistry, fromBinary } from "@bufbuild/protobuf";
+import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+
+const descriptorSet = fromBinary(
+  FileDescriptorSetSchema,
+  readFileSync("descriptors.binpb"),
+);
+registerReflectionServices(router, {
+  files: Array.from(createFileRegistry(descriptorSet).files),
+});
+```
+
+Now `grpcurl describe` shows your comments:
+
+```console
+$ grpcurl -plaintext localhost:8080 describe example.v1.UserService
+example.v1.UserService is a service:
+// Manages users.
+service UserService {
+  // Creates a new user.
+  rpc CreateUser ( .example.v1.CreateUserRequest ) returns ( .example.v1.CreateUserResponse );
+}
+```
+
+Make sure the descriptor set is built from the same `.proto` files as your generated code, or clients may see definitions that don't match your server.
 
 ## Requirements and limitations
 

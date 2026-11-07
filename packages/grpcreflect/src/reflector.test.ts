@@ -13,16 +13,21 @@
 // limitations under the License.
 
 import * as assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { suite, test } from "node:test";
 import {
   create,
+  createFileRegistry,
   type DescFile,
   equals,
   fromBinary,
   type MessageInitShape,
   toBinary,
 } from "@bufbuild/protobuf";
-import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
+import {
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+} from "@bufbuild/protobuf/wkt";
 import {
   Code,
   ConnectError,
@@ -351,6 +356,66 @@ void suite("allExtensionNumbersOfType", () => {
     ],
     [notFoundResponse("type not found")],
   );
+});
+
+void suite("source code info", () => {
+  // Generated code strips source code info. This descriptor set is built with
+  // `buf build` from the same files, and includes it.
+  const withSourceInfo = createFileRegistry(
+    fromBinary(
+      FileDescriptorSetSchema,
+      readFileSync(new URL("gen/test/descriptors.binpb", import.meta.url)),
+    ),
+  );
+  const serviceFile = withSourceInfo.getFile("test/v3/service.proto");
+  const typesFile = withSourceInfo.getFile("test/v2/types.proto");
+  assert.ok(serviceFile?.proto.sourceCodeInfo);
+  assert.ok(typesFile?.proto.sourceCodeInfo);
+  assert.equal(file_test_v3_service.proto.sourceCodeInfo, undefined);
+  testReflection(
+    "files given in options take precedence over generated code",
+    [
+      {
+        messageRequest: {
+          case: "fileContainingSymbol",
+          value: "test.v3.TestService",
+        },
+      },
+    ],
+    [fileDescriptorResponse(serviceFile, typesFile)],
+    (router) => {
+      router.service(TestService, {});
+      registerReflectionServices(router, {
+        files: Array.from(withSourceInfo.files),
+      });
+    },
+  );
+  void test("includes comments", async () => {
+    const [response] = await reflect(
+      "v1",
+      [
+        {
+          messageRequest: {
+            case: "fileByFilename",
+            value: "test/v3/service.proto",
+          },
+        },
+      ],
+      (router) => {
+        router.service(TestService, {});
+        registerReflectionServices(router, {
+          files: Array.from(withSourceInfo.files),
+        });
+      },
+    );
+    assert.equal(response?.messageResponse.case, "fileDescriptorResponse");
+    const [bytes] = response.messageResponse.value.fileDescriptorProto;
+    assert.ok(bytes);
+    const comments = fromBinary(FileDescriptorProtoSchema, bytes)
+      .sourceCodeInfo?.location.map((l) => l.leadingComments)
+      .filter((c) => c !== "");
+    assert.deepEqual(comments, [" A service for tests.\n"]);
+  });
 });
 
 void suite("stream", () => {
