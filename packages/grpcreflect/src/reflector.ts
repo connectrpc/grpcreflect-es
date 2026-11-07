@@ -165,7 +165,7 @@ function parseFileDescriptorSet(bytes: Uint8Array): DescFile[] {
       // A buf image is a valid FileDescriptorSet, but adds a field with
       // buf-specific metadata to each file. Clients don't need it. Unknown
       // fields nested in a file, for example custom options, are kept.
-      file.$unknown = undefined;
+      delete file.$unknown;
     }
     registry = createFileRegistryFromSet(set);
   } catch (e) {
