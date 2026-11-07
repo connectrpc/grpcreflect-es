@@ -29,6 +29,7 @@
     },
     "test:browser": {
       "dependsOn": ["^build", "generate"],
+      "passThroughEnv": ["BROWSERS"],
       "cache": false
     },
     "format": {
