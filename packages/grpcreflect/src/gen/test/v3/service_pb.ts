@@ -106,6 +106,8 @@ export const QueryKindSchema: GenEnum<QueryKind> = /*@__PURE__*/
   enumDesc(file_test_v3_service, 0);
 
 /**
+ * A service for tests.
+ *
  * @generated from service test.v3.TestService
  */
 export const TestService: GenService<{

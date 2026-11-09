@@ -21,6 +21,8 @@ import {
 /**
  * Creates a FileRegistry from a set of files, including all of their
  * transitive dependencies.
+ *
+ * If more than one file has the same name, the first one wins.
  */
 export function createFileRegistry(files: readonly DescFile[]): FileRegistry {
   const fileMap = new Map<string, DescFile>();

@@ -83,10 +83,14 @@ export const CreateUserResponseSchema: GenMessage<CreateUserResponse> = /*@__PUR
   messageDesc(file_example_v1_user, 2);
 
 /**
+ * Manages users.
+ *
  * @generated from service example.v1.UserService
  */
 export const UserService: GenService<{
   /**
+   * Creates a new user.
+   *
    * @generated from rpc example.v1.UserService.CreateUser
    */
   createUser: {

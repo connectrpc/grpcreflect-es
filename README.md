@@ -108,11 +108,52 @@ registerReflectionServices(router, {
 
 Additional files to make available. The files of registered services, and all of their imports, are always included, so you only need this for files that no service imports. The most common case is a file that declares custom options or other extensions, so that clients can resolve them.
 
+### `fileDescriptorSet`
+
+A serialized `google.protobuf.FileDescriptorSet`, for example the output of `buf build`. Its files take precedence over files with the same name from generated code. Use it to [show comments](#showing-comments).
+
 ### `services`
 
 Limits the services that are listed, given as service descriptors or fully qualified names. The default is to list every service on the router, including the reflection services. Use this to hide services from `list`.
 
 This only affects listing. Clients can still describe any type in the available files, including unlisted services.
+
+## Showing comments
+
+By default, clients don't see the comments in your `.proto` files. Comments are part of the source code info in a file descriptor, and generated code leaves it out to keep bundles small.
+
+To serve comments, build a descriptor set in the same step where you generate code. `buf build` includes comments by default:
+
+```bash
+buf generate && buf build -o descriptors.binpb
+```
+
+Then pass it to `registerReflectionServices`:
+
+```ts
+registerReflectionServices(router, {
+  fileDescriptorSet: readFileSync("descriptors.binpb"),
+});
+```
+
+Now `grpcurl describe` shows your comments:
+
+```console
+$ grpcurl -plaintext localhost:8080 describe example.v1.UserService
+example.v1.UserService is a service:
+// Manages users.
+service UserService {
+  // Creates a new user.
+  rpc CreateUser ( .example.v1.CreateUserRequest ) returns ( .example.v1.CreateUserResponse );
+}
+```
+
+A few things to know:
+
+- Build the descriptor set from the same `.proto` files as your generated code, or clients may see definitions that don't match your server.
+- The descriptor set must include imports. `buf build` includes them by default; with `protoc`, use `--include_imports --include_source_info`.
+- An invalid descriptor set throws when you call `registerReflectionServices`, so a bad file fails at startup, not on the first request.
+- `fileDescriptorSet` takes bytes, not a path, so it works on any runtime. With a bundler, you can also import the file as bytes.
 
 ## Requirements and limitations
 
