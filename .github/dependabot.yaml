@@ -22,13 +22,16 @@ updates:
           - "@bufbuild/protoc-gen-es"
       connect:
         patterns:
-         - "@connectrpc/*"
+          - "@connectrpc/*"
       build:
         patterns:
           - "typescript"
           - "tsx"
-          - "@bufbuild/protobuf"
+          - "@types/node"
+          - "turbo"
       lint-and-format:
         patterns:
-          - "biome"
+          - "@biomejs/biome"
           - "@bufbuild/license-header"
+          - "@arethetypeswrong/cli"
+          - "publint"

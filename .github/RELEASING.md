@@ -3,10 +3,9 @@
 ## Prerequisites
 
 - See the setup and tools required in CONTRIBUTING.md
-- A granular access token for npmjs.com with read and write permissions, scoped
-  to the `connectrpc` organization.
 - Make sure that the repository is in a good state, without PRs close to merge
   that would ideally be part of the release.
+- npm trusted publishing must be configured for `@connectrpc/grpcreflect` with the `publish.yaml` workflow. See https://docs.npmjs.com/trusted-publishers
 
 ## Steps
 
@@ -18,12 +17,12 @@
 4. Commit, push, and open a pull request with the title "Release 1.2.3".
 5. Edit the PR description with release notes. See the section below for details.
 6. Make sure CI passed on your PR and ask a maintainer for review.
-7. After approval, run the following command to publish to npmjs.com: `npm run release`.
-8. Merge your PR.
-9. Create a new release in the GitHub UI
-   - Choose "v1.2.3" as a tag and as the release title.
+7. After approval, merge your PR.
+8. Create a new release in the GitHub UI
+   - Choose "v1.2.3" as a tag on the merge commit, and as the release title.
    - Copy and paste the release notes from the PR description.
    - Check the checkbox “Create a discussion for this release”.
+9. The tag triggers the publish workflow, which publishes to npm with provenance. Monitor the run and make sure it succeeds.
 
 ## Release notes
 

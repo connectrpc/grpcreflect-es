@@ -1,0 +1,14 @@
+{
+  "name": "ts5.8",
+  "private": true,
+  "scripts": {
+    "test": "node_modules/.bin/tsc --outDir dist"
+  },
+  "dependencies": {
+    "@connectrpc/grpcreflect": "*",
+    "grpcreflect-example": "*",
+    "grpcreflect-runtime-tests": "*",
+    "@types/node": "26.6.6",
+    "typescript": "5.8.x"
+  }
+}

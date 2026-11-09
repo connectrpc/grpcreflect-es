@@ -1,4 +1,4 @@
-// Copyright 2025 The Connect Authors
+// Copyright 2025-2026 The Connect Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,27 +19,23 @@ import {
 } from "@bufbuild/protobuf";
 
 /**
- * Creates a FileRegistry from a set of files.
+ * Creates a FileRegistry from a set of files, including all of their
+ * transitive dependencies.
  */
-export function createFileRegistry(files: DescFile[]): FileRegistry {
+export function createFileRegistry(files: readonly DescFile[]): FileRegistry {
   const fileMap = new Map<string, DescFile>();
-  addToMap(fileMap, files);
+  const addFile = (file: DescFile) => {
+    if (fileMap.has(file.proto.name)) {
+      return;
+    }
+    fileMap.set(file.proto.name, file);
+    file.dependencies.forEach(addFile);
+  };
+  files.forEach(addFile);
   const allFiles = Array.from(fileMap.values());
   return {
     ...createRegistry(...allFiles),
     files: allFiles,
-    getFile(name) {
-      return fileMap.get(name);
-    },
+    getFile: (name) => fileMap.get(name),
   };
-}
-
-function addToMap(map: Map<string, DescFile>, files: DescFile[]) {
-  for (const file of files) {
-    if (map.has(file.proto.name)) {
-      continue;
-    }
-    map.set(file.proto.name, file);
-    addToMap(map, file.dependencies);
-  }
 }

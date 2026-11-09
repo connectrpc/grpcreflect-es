@@ -1,16 +1,22 @@
 {
   "name": "@connectrpc/grpcreflect",
   "version": "0.1.0",
-  "description": "Flexible, efficient request validation for Connect",
+  "description": "gRPC server reflection for Connect",
   "keywords": [
     "javascript",
     "typescript",
     "protobuf",
     "grpc",
     "rpc",
-    "connectrpc"
+    "connectrpc",
+    "reflection",
+    "grpcurl"
   ],
   "license": "Apache-2.0",
+  "homepage": "https://github.com/connectrpc/grpcreflect-es",
+  "bugs": {
+    "url": "https://github.com/connectrpc/grpcreflect-es/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/connectrpc/grpcreflect-es.git",
@@ -19,35 +25,40 @@
   "scripts": {
     "generate": "buf generate",
     "postgenerate": "license-header src/gen",
-    "test": "npx tsx --test ./src/*.test.ts",
+    "test": "tsc --noEmit && tsx --test --test-reporter=tap src/*.test.ts",
+    "test:bun": "bun test",
     "prebuild": "rm -rf ./dist/*",
     "build": "npm run build:cjs && npm run build:esm",
-    "build:cjs": "tsc --project tsconfig.json --module commonjs --verbatimModuleSyntax false --moduleResolution node10 --outDir ./dist/cjs && echo >./dist/cjs/package.json '{\"type\":\"commonjs\"}'",
-    "build:esm": "tsc --project tsconfig.json --outDir ./dist/esm",
+    "build:cjs": "tsc --project tsconfig.build.json --module commonjs --moduleResolution bundler --verbatimModuleSyntax false --outDir ./dist/cjs && echo >./dist/cjs/package.json '{\"type\":\"commonjs\"}'",
+    "build:esm": "tsc --project tsconfig.build.json --outDir ./dist/esm",
     "format": "biome format --write",
     "lint": "biome lint --error-on-warnings",
-    "attw": "attw --pack",
+    "attw": "attw --pack && publint --strict",
     "license-header": "license-header"
   },
   "type": "module",
   "sideEffects": false,
+  "files": [
+    "dist/**"
+  ],
   "main": "./dist/cjs/index.js",
   "types": "./dist/cjs/index.d.ts",
   "exports": {
     ".": {
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
-    }
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "provenance": true
   },
   "peerDependencies": {
-    "@bufbuild/protobuf": "^2.6.3",
-    "@connectrpc/connect": "^2.0.3"
+    "@bufbuild/protobuf": "^2.5.0",
+    "@connectrpc/connect": "^2.0.0"
   },
   "devDependencies": {
-    "@bufbuild/protobuf": "^2.6.3",
-    "@connectrpc/connect": "^2.0.3"
-  },
-  "dependencies": {
-    "@bufbuild/protocompile": "^0.0.1"
+    "@bufbuild/protobuf": "^2.17.0",
+    "@connectrpc/connect": "^2.3.0"
   }
 }
