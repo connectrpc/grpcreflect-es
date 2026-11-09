@@ -8,7 +8,7 @@
     "@connectrpc/grpcreflect": "*",
     "grpcreflect-example": "*",
     "grpcreflect-runtime-tests": "*",
-    "@types/node": "22.13.14",
-    "typescript": "5.0.x"
+    "@types/node": "26.6.6",
+    "typescript": "7.0.x"
   }
 }

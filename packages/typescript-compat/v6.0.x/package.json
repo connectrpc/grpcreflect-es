@@ -10,6 +10,6 @@
     "grpcreflect-example": "*",
     "grpcreflect-runtime-tests": "*",
     "@types/node": "26.6.6",
-    "typescript": "6.0.x"
+    "typescript": "7.0.x"
   }
 }
