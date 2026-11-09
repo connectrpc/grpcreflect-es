@@ -2,6 +2,7 @@
 /packages/typescript-compat/*/dist
 node_modules
 .turbo
+.wrangler
 
 # Logs
 *.log

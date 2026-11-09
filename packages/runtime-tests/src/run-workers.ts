@@ -21,6 +21,8 @@ const mf = new Miniflare({
   modules: true,
   script: await bundle("./worker.ts", ["workerd", "worker", "browser"]),
   compatibilityDate: "2026-01-01",
+  // Use Miniflare's placeholder for request.cf
+  cf: false,
 });
 try {
   const res = await mf.dispatchFetch("http://localhost/");
